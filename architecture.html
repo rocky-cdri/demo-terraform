@@ -1,0 +1,1861 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>myapp · AWS Infrastructure</title>
+
+<!--
+  Design reference: .claude/design/apple/DESIGN.md
+  ─────────────────────────────────────────────────
+  Surface palette  : #ffffff canvas · #f5f5f7 parchment · #1d1d1f near-black
+  Accent           : #0066cc Action Blue (single interactive color, no exceptions)
+  Typography       : system-ui / -apple-system → SF Pro on Apple devices
+                     Headlines 600 / Body 400 / display tight letter-spacing
+  Shadows          : ONE product shadow rgba(0,0,0,0.22) 3px 5px 30px  — icons only
+  Borders          : 1px rgba(0,0,0,0.08) hairline — no colored borders
+  Radius           : 18px cards · pill badges · 8px utility buttons
+  Gradients        : none
+  Motion           : transform:scale(0.95) press state only
+-->
+
+<style>
+/* ──────────────────────────────────────
+   TOKENS  (Apple DESIGN.md)
+────────────────────────────────────── */
+:root {
+  /* Surface */
+  --canvas:       #ffffff;
+  --parchment:    #f5f5f7;
+  --pearl:        #fafafc;
+  --tile-1:       #1d1d1f;
+  --tile-2:       #2a2a2c;
+
+  /* Text */
+  --ink:          #1d1d1f;
+  --ink-80:       #333333;
+  --ink-48:       #6e6e73;
+  --ink-30:       #86868b;
+  --on-dark:      #ffffff;
+  --muted-dark:   #cccccc;
+
+  /* Accent (single) */
+  --blue:         #0066cc;
+  --blue-focus:   #0071e3;
+  --blue-dark:    #2997ff;   /* dark surfaces only */
+
+  /* Borders */
+  --hairline:     #e0e0e0;
+  --soft:         rgba(0,0,0,0.08);
+  --softer:       rgba(0,0,0,0.04);
+
+  /* AWS service category colors — used only as icon tints */
+  --c-net:  #6e36f5;
+  --c-cmp:  #d4580f;
+  --c-db:   #1a5eb8;
+  --c-str:  #1e7e34;
+  --c-sec:  #c1122b;
+
+  /* Radius */
+  --r-sm:   8px;
+  --r-md:   11px;
+  --r-lg:   18px;
+  --r-pill: 9999px;
+
+  /* Spacing (8px base) */
+  --sp-xs:  8px;
+  --sp-sm:  12px;
+  --sp-md:  17px;
+  --sp-lg:  24px;
+  --sp-xl:  32px;
+  --sp-2xl: 48px;
+  --sp-sec: 80px;
+
+  /* Product shadow — ONLY for icon renders */
+  --product-shadow: rgba(0,0,0,0.22) 3px 5px 30px 0;
+}
+
+/* ──────────────────────────────────────
+   RESET & BASE
+────────────────────────────────────── */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+html { -webkit-font-smoothing: antialiased; }
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.47;
+  letter-spacing: -0.374px;
+  color: var(--ink);
+  background: var(--parchment);
+  min-height: 100vh;
+}
+
+/* ──────────────────────────────────────
+   GLOBAL NAV  (black bar, 44px)
+────────────────────────────────────── */
+.gnav {
+  position: sticky; top: 0; z-index: 200;
+  height: 44px;
+  background: rgba(0,0,0,0.85);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  display: flex; align-items: center;
+  padding: 0 22px; gap: 32px;
+}
+
+.gnav-logo {
+  display: flex; align-items: center; gap: 8px;
+  text-decoration: none;
+}
+.gnav-logo svg { display:block; }
+.gnav-product {
+  font-size: 17px; font-weight: 600;
+  letter-spacing: -0.374px; color: var(--on-dark);
+  white-space: nowrap;
+}
+
+.gnav-links {
+  display: flex; align-items: center; gap: 20px;
+  flex: 1;
+  font-size: 12px; font-weight: 400;
+  letter-spacing: -0.12px;
+  color: rgba(255,255,255,0.6);
+}
+.gnav-links a {
+  color: inherit; text-decoration: none;
+  transition: color .15s;
+  cursor: pointer;
+}
+.gnav-links a:hover { color: var(--on-dark); }
+
+/* env indicator in gnav — read-only badge showing current env */
+.env-indicator {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 400;
+  letter-spacing: -0.12px; color: rgba(255,255,255,0.45);
+}
+.env-indicator-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #34c759;
+  transition: background .25s;
+}
+.env-indicator-label {
+  color: rgba(255,255,255,0.55);
+  transition: all .25s;
+}
+
+/* ──────────────────────────────────────
+   SUB-NAV  (frosted parchment, 52px)
+────────────────────────────────────── */
+.subnav {
+  position: sticky; top: 44px; z-index: 190;
+  height: 52px;
+  background: rgba(245,245,247,0.85);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--soft);
+  display: flex; align-items: center;
+  padding: 0 22px; gap: 24px;
+}
+.subnav-title {
+  font-size: 21px; font-weight: 600;
+  letter-spacing: 0.231px; color: var(--ink);
+  white-space: nowrap;
+}
+.subnav-links {
+  display: flex; align-items: center; gap: 20px;
+  font-size: 14px; font-weight: 400;
+  letter-spacing: -0.224px; color: var(--ink-48);
+  flex: 1;
+}
+.subnav-links a {
+  color: inherit; text-decoration: none;
+  cursor: pointer; transition: color .15s;
+}
+.subnav-links a:hover { color: var(--blue); }
+.subnav-cta {
+  margin-left: auto;
+  height: 32px; padding: 0 18px;
+  border-radius: var(--r-pill);
+  font-size: 14px; font-weight: 400;
+  letter-spacing: -0.224px;
+  background: var(--blue); color: var(--on-dark);
+  border: none; cursor: pointer;
+  transition: opacity .15s;
+}
+.subnav-cta:hover { opacity: 0.85; }
+.subnav-cta:active { transform: scale(0.95); }
+
+/* ──────────────────────────────────────
+   PAGE LAYOUT
+────────────────────────────────────── */
+.layout {
+  display: flex;
+  height: calc(100vh - 148px);   /* 44 gnav + 52 subnav + 52 envbar */
+  overflow: hidden;
+}
+.canvas-wrap {
+  flex: 1; overflow: auto;
+  padding: 32px 28px 120px;
+  background: var(--parchment);
+}
+.canvas-wrap::-webkit-scrollbar { width: 8px; }
+.canvas-wrap::-webkit-scrollbar-track { background: transparent; }
+.canvas-wrap::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.12); border-radius: var(--r-pill);
+  border: 2px solid var(--parchment);
+}
+
+/* ──────────────────────────────────────
+   ENV BAR  (Apple segment control, sticky below subnav)
+────────────────────────────────────── */
+.envbar {
+  position: sticky; top: 96px; z-index: 180;
+  background: rgba(245,245,247,0.92);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--soft);
+  display: flex; justify-content: center; align-items: center;
+  padding: 8px 22px; height: 52px;
+}
+.seg {
+  display: flex;
+  background: rgba(0,0,0,0.065);
+  border-radius: var(--r-pill);
+  padding: 3px; gap: 2px;
+}
+.seg-btn {
+  display: flex; align-items: center; justify-content: center;
+  padding: 5px 24px; gap: 10px;
+  border: none; border-radius: calc(var(--r-pill) - 2px);
+  cursor: pointer; background: transparent;
+  transition: background .2s ease, box-shadow .2s ease;
+  min-width: 190px;
+}
+.seg-btn:active { transform: scale(0.97); }
+.seg-btn.active {
+  background: var(--canvas);
+  box-shadow: 0 1px 5px rgba(0,0,0,0.13), 0 0 0 0.5px rgba(0,0,0,0.05);
+}
+.seg-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.seg-dot-prod { background: #34c759; }
+.seg-dot-stg  { background: #ff9500; }
+.seg-dot-dev  { background: #5856d6; }
+.seg-btn:not(.active) .seg-dot { opacity: 0.35; }
+.seg-text { display: flex; flex-direction: column; align-items: flex-start; }
+.seg-name {
+  font-size: 13px; font-weight: 600;
+  letter-spacing: -0.2px; color: var(--ink-48);
+  transition: color .15s; line-height: 1.2;
+}
+.seg-btn.active .seg-name { color: var(--ink); }
+.seg-desc {
+  font-size: 11px; font-weight: 400;
+  letter-spacing: -0.12px; color: var(--ink-30);
+  line-height: 1.3; white-space: nowrap;
+  transition: color .15s;
+}
+.seg-btn.active .seg-desc { color: var(--ink-48); }
+
+/* ──────────────────────────────────────
+   ENV VIEWS
+────────────────────────────────────── */
+@keyframes envFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.env-view { display: none; }
+.env-view.on { display: block; animation: envFadeIn .24s ease; }
+
+/* ──────────────────────────────────────
+   ZONE CONTAINERS
+   Apple: surface-change is the divider, not borders/gradients
+────────────────────────────────────── */
+.zone {
+  border-radius: var(--r-lg);
+  padding: var(--sp-lg);
+  position: relative;
+}
+/* AWS Cloud — white card on parchment */
+.z-cloud {
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  min-width: 880px;
+}
+/* VPC — parchment on white */
+.z-vpc {
+  background: var(--parchment);
+  border: 1px solid rgba(0,0,0,0.06);
+  margin-top: var(--sp-md);
+}
+/* Public subnet — very faint green surface */
+.z-pub {
+  background: #f6fef9;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+/* Private subnet — very faint blue surface */
+.z-priv {
+  background: #f0f6ff;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+/* AZ column — white on tinted bg */
+.az-col {
+  flex: 1; border-radius: 14px;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  padding: 14px;
+}
+
+/* ──────────────────────────────────────
+   ZONE LABELS  (small gray chips)
+────────────────────────────────────── */
+.zlabel {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.07px;
+  color: var(--ink-48);
+  background: rgba(0,0,0,0.05);
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  margin-bottom: var(--sp-sm);
+}
+.zlabel.on-dark {
+  color: var(--muted-dark);
+  background: rgba(255,255,255,0.1);
+}
+
+/* ──────────────────────────────────────
+   AZ HEADER
+────────────────────────────────────── */
+.az-hd {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: -0.12px; color: var(--ink-48);
+  text-align: center; padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+.az-hd strong { color: var(--ink-80); }
+
+/* ──────────────────────────────────────
+   SERVICE CARDS  (store-utility-card)
+────────────────────────────────────── */
+.svc {
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  padding: var(--sp-lg);
+  cursor: pointer;
+  transition: border-color .15s;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 8px;
+  text-align: center; min-width: 88px;
+  position: relative;
+}
+.svc:hover { border-color: rgba(0,0,0,0.2); }
+.svc:active { transform: scale(0.98); }
+.svc.sel {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(0,102,204,0.12);
+}
+
+/* Icon — product shadow treatment */
+.ic {
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  box-shadow: var(--product-shadow);  /* the ONE allowed shadow */
+}
+.ic svg { width: 28px; height: 28px; }
+
+/* Category tints (very subtle) */
+.ic-net  { background: rgba(110,54,245,0.09);  }
+.ic-cmp  { background: rgba(212,88,15,0.09);   }
+.ic-db   { background: rgba(26,94,184,0.09);   }
+.ic-str  { background: rgba(30,126,52,0.09);   }
+.ic-sec  { background: rgba(193,18,43,0.09);   }
+.ic-dark { background: rgba(0,0,0,0.06); box-shadow:none; }
+
+/* Icon SVG fill = category color */
+.ic-net  svg { color: var(--c-net); }
+.ic-cmp  svg { color: var(--c-cmp); }
+.ic-db   svg { color: var(--c-db);  }
+.ic-str  svg { color: var(--c-str); }
+.ic-sec  svg { color: var(--c-sec); }
+.ic-dark svg { color: var(--ink-48); }
+
+.svc-name {
+  font-size: 12px; font-weight: 600;
+  letter-spacing: -0.12px; color: var(--ink);
+}
+.svc-sub {
+  font-size: 11px; font-weight: 400;
+  letter-spacing: -0.12px; color: var(--ink-48);
+}
+
+/* Wide card (ALB) */
+.svc-h {
+  flex-direction: row; align-items: center;
+  gap: var(--sp-md); min-width: unset; width: 100%;
+  padding: var(--sp-md) var(--sp-lg);
+  border-radius: var(--r-lg);
+}
+.svc-h .svc-meta { flex: 1; text-align: left; }
+.svc-h .svc-name { font-size: 15px; margin-bottom: 4px; }
+
+/* ──────────────────────────────────────
+   BADGES  (pill chips)
+────────────────────────────────────── */
+.badges { display: flex; gap: 5px; flex-wrap: wrap; }
+.badge {
+  font-size: 11px; font-weight: 400;
+  letter-spacing: -0.12px;
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+  border: 1px solid var(--hairline);
+  background: var(--parchment);
+  color: var(--ink-80);
+}
+/* Only the "action" badges get blue — matching Apple's single-accent rule */
+.badge-blue {
+  background: rgba(0,102,204,0.08);
+  border-color: rgba(0,102,204,0.2);
+  color: var(--blue);
+}
+.badge-warn {
+  background: rgba(255,149,0,0.08);
+  border-color: rgba(255,149,0,0.2);
+  color: #b05a00;
+}
+.badge-ok {
+  background: rgba(52,199,89,0.08);
+  border-color: rgba(52,199,89,0.2);
+  color: #1e7e34;
+}
+.badge-err {
+  background: rgba(255,59,48,0.08);
+  border-color: rgba(255,59,48,0.2);
+  color: #c1122b;
+}
+
+/* ──────────────────────────────────────
+   AZ GRID
+────────────────────────────────────── */
+.az-row { display: flex; gap: var(--sp-sm); }
+.az-row .az-col { flex: 1; }
+
+/* ──────────────────────────────────────
+   TF LAYER CHIP
+────────────────────────────────────── */
+.tf-chip {
+  font-size: 11px; font-weight: 400; letter-spacing: -0.12px;
+  padding: 2px 8px; border-radius: var(--r-pill);
+  background: rgba(0,0,0,0.05); color: var(--ink-48);
+  white-space: nowrap;
+}
+
+/* ──────────────────────────────────────
+   EKS CLUSTER CARD
+────────────────────────────────────── */
+.eks-card {
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  padding: var(--sp-lg);
+  cursor: pointer;
+  transition: border-color .15s;
+  margin-top: 6px;
+}
+.eks-card:hover { border-color: rgba(0,0,0,0.2); }
+.eks-card:active { transform: scale(0.99); }
+
+.eks-hd {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: var(--sp-md);
+}
+.eks-title {
+  font-size: 15px; font-weight: 600;
+  letter-spacing: -0.374px; color: var(--ink);
+  flex: 1;
+}
+.eks-title .sub {
+  font-size: 12px; font-weight: 400; color: var(--ink-48);
+  margin-top: 2px; letter-spacing: -0.12px;
+}
+
+.ng-row { display: flex; gap: var(--sp-sm); }
+.ng {
+  flex: 1; border-radius: 14px;
+  border: 1px solid var(--hairline);
+  background: var(--parchment);
+  padding: 14px; cursor: pointer;
+  transition: border-color .15s;
+}
+.ng:hover { border-color: rgba(0,0,0,0.2); }
+.ng:active { transform: scale(0.98); }
+.ng-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: -0.12px; color: var(--ink-48);
+}
+.ng-hd .type { color: var(--ink); }
+
+.nodes { display: flex; gap: 5px; flex-wrap: wrap; }
+.node {
+  width: 32px; height: 32px; border-radius: 9px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: border-color .15s;
+  box-shadow: var(--product-shadow);
+}
+.node:hover { border-color: var(--blue); }
+.node:active { transform: scale(0.92); }
+.node svg { width: 18px; height: 18px; color: var(--c-cmp); }
+.node.spot { opacity: 0.55; }
+
+.ng-foot {
+  margin-top: 8px;
+  font-size: 11px; font-weight: 400;
+  letter-spacing: -0.12px; color: var(--ink-48);
+}
+
+/* ──────────────────────────────────────
+   RDS CARD
+────────────────────────────────────── */
+.rds-card {
+  display: flex; align-items: center; gap: var(--sp-md);
+  background: var(--canvas); border: 1px solid var(--hairline);
+  border-radius: var(--r-lg); padding: var(--sp-md) var(--sp-lg);
+  cursor: pointer; transition: border-color .15s;
+  width: 100%; margin-top: 10px;
+}
+.rds-card:hover { border-color: rgba(0,0,0,0.2); }
+.rds-card:active { transform: scale(0.99); }
+.rds-title {
+  font-size: 14px; font-weight: 600;
+  letter-spacing: -0.224px; color: var(--ink);
+  margin-bottom: 6px;
+}
+
+/* ──────────────────────────────────────
+   SECURITY GROUP SECTION
+────────────────────────────────────── */
+.sg-section {
+  background: var(--parchment);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg); padding: var(--sp-md) var(--sp-lg);
+  margin-top: var(--sp-md);
+}
+.sg-row { display: flex; gap: var(--sp-sm); margin-top: 10px; }
+.sg-card {
+  flex: 1; border-radius: 14px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas); padding: 14px;
+  cursor: pointer; transition: border-color .15s;
+}
+.sg-card:hover { border-color: rgba(0,0,0,0.2); }
+.sg-card:active { transform: scale(0.98); }
+.sg-name {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; font-weight: 600;
+  letter-spacing: -0.12px; color: var(--ink);
+  margin-bottom: 7px;
+}
+.sg-name .ic-sm {
+  width: 20px; height: 20px; border-radius: 5px;
+  display:flex;align-items:center;justify-content:center;
+  background: rgba(193,18,43,0.08);
+  flex-shrink:0;
+  box-shadow: var(--product-shadow);
+}
+.sg-name .ic-sm svg { width:12px;height:12px;color:var(--c-sec); }
+
+.rule {
+  font-size: 11px; font-weight: 400;
+  letter-spacing: -0.12px; color: var(--ink-48);
+  padding: 1px 0; line-height: 1.6;
+}
+.rule em { color: var(--c-sec); font-style: normal; font-weight: 600; }
+
+/* ──────────────────────────────────────
+   BOTTOM ROW
+────────────────────────────────────── */
+.bottom-row { display: flex; gap: var(--sp-sm); margin-top: var(--sp-md); }
+.s3-card {
+  flex: 1; display: flex; align-items: center;
+  gap: var(--sp-md); padding: var(--sp-md) var(--sp-lg);
+  border-radius: var(--r-lg); border: 1px solid var(--hairline);
+  background: var(--canvas); cursor: pointer;
+  transition: border-color .15s;
+}
+.s3-card:hover { border-color: rgba(0,0,0,0.2); }
+.s3-card:active { transform: scale(0.99); }
+.s3-label {
+  font-size: 11px; font-weight: 400;
+  letter-spacing: -0.12px; color: var(--ink-48);
+  margin-bottom: 2px;
+}
+.s3-name {
+  font-size: 14px; font-weight: 600;
+  letter-spacing: -0.224px; color: var(--ink);
+}
+
+/* ──────────────────────────────────────
+   FLOW CONNECTORS
+   Apple: clean, precise, no animation excess
+────────────────────────────────────── */
+.flow {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 4px;
+  padding: 4px 0;
+}
+.step {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--blue); color: var(--on-dark);
+  font-size: 11px; font-weight: 600; letter-spacing: 0;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.flow-label {
+  font-size: 11px; font-weight: 400;
+  letter-spacing: -0.12px;
+  color: var(--ink-48);
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  background: rgba(0,0,0,0.05);
+  white-space: nowrap;
+}
+.vline {
+  width: 1px; height: 22px;
+  background: var(--hairline);
+  position: relative;
+}
+/* Single animated dot — restrained */
+.vline::after {
+  content: '';
+  position: absolute; left: -2px; top: -6px;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--blue);
+  animation: dot 2.4s ease-in-out infinite;
+}
+@keyframes dot {
+  0%   { top: -6px; opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { top: 28px; opacity: 0; }
+}
+.arrow {
+  width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--hairline);
+}
+
+/* ──────────────────────────────────────
+   INTERNET ZONE (above cloud)
+────────────────────────────────────── */
+.inet-row {
+  display: flex; justify-content: center;
+  align-items: flex-end; gap: 80px;
+  margin-bottom: var(--sp-md);
+}
+
+/* ──────────────────────────────────────
+   FLEX HELPERS
+────────────────────────────────────── */
+.row-c   { display:flex; justify-content:center; }
+.row-b   { display:flex; align-items:center; justify-content:space-between; }
+.row-g8  { display:flex; align-items:center; gap:8px; }
+.row-g6  { display:flex; align-items:center; gap:6px; }
+.mt6     { margin-top:6px; }
+.mt10    { margin-top:10px; }
+.mt12    { margin-top:12px; }
+
+/* ──────────────────────────────────────
+   STATUS DOT
+────────────────────────────────────── */
+@keyframes blink { 0%,100%{opacity:1}50%{opacity:0.3} }
+.dot-ok  { width:6px;height:6px;border-radius:50%;background:#34c759;animation:blink 2.5s infinite;display:inline-block; }
+.dot-stg { background: #ff9500; }
+
+/* ──────────────────────────────────────
+   DIVIDERS
+────────────────────────────────────── */
+.section-divider {
+  height: 1px; background: var(--hairline); margin: var(--sp-md) 0;
+}
+
+/* ──────────────────────────────────────
+   DETAIL PANEL  (white, clean)
+────────────────────────────────────── */
+.dp {
+  width: 0; overflow: hidden;
+  transition: width .28s ease;
+  background: var(--canvas);
+  border-left: 1px solid var(--hairline);
+  flex-shrink: 0;
+}
+.dp.open { width: 360px; }
+
+.dp-scroll {
+  width: 360px; height: 100%;
+  overflow-y: auto; padding: var(--sp-xl) var(--sp-xl) var(--sp-2xl);
+}
+.dp-scroll::-webkit-scrollbar { width: 6px; }
+.dp-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.1); border-radius: var(--r-pill);
+  border: 2px solid var(--canvas);
+}
+
+/* ── panel header ── */
+.dp-header {
+  padding-bottom: var(--sp-lg);
+  margin-bottom: var(--sp-xl);
+  border-bottom: 1px solid var(--hairline);
+  position: relative;
+}
+.dp-close {
+  position: absolute; top: 0; right: 0;
+  width: 28px; height: 28px; border-radius: var(--r-sm);
+  border: 1px solid var(--hairline);
+  background: var(--parchment); color: var(--ink-48);
+  font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+}
+.dp-close:hover { background: var(--canvas); color: var(--ink); border-color: rgba(0,0,0,0.2); }
+.dp-close:active { transform: scale(0.95); }
+
+.dp-ic {
+  width: 56px; height: 56px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 14px;
+  box-shadow: var(--product-shadow);
+}
+.dp-ic svg { width: 34px; height: 34px; }
+
+.dp-title {
+  font-size: 21px; font-weight: 600;
+  letter-spacing: -0.374px; color: var(--ink);
+  margin-bottom: 3px;
+}
+.dp-sub {
+  font-size: 14px; font-weight: 400;
+  letter-spacing: -0.224px; color: var(--ink-48);
+}
+
+/* ── panel sections ── */
+.dp-sec { margin-bottom: var(--sp-xl); }
+.dp-sec-title {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.07px; color: var(--ink-30);
+  text-transform: uppercase;
+  margin-bottom: var(--sp-xs);
+  padding-bottom: var(--sp-xs);
+  border-bottom: 1px solid var(--hairline);
+}
+.dp-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 5px 0;
+  font-size: 14px; font-weight: 400;
+  letter-spacing: -0.224px;
+  border-bottom: 1px solid var(--softer);
+}
+.dp-row:last-child { border-bottom: none; }
+.dp-k { color: var(--ink-48); flex-shrink: 0; margin-right: 10px; }
+.dp-v { color: var(--ink); text-align: right; }
+.dp-v.vb { color: var(--blue); }
+.dp-v.vg { color: #1e7e34; }
+.dp-v.vr { color: #c1122b; }
+.dp-v.vy { color: #b05a00; }
+.dp-v.vn { color: var(--c-net); }
+
+/* code block */
+.dp-code {
+  background: var(--parchment);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  padding: var(--sp-md);
+  font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
+  font-size: 12px; line-height: 1.7;
+  color: var(--ink-80); overflow-x: auto;
+  letter-spacing: 0;
+}
+.dp-code .kw  { color: var(--c-net); font-weight: 600; }
+.dp-code .str { color: #1e7e34; }
+.dp-code .num { color: #b05a00; }
+.dp-code .k   { color: var(--blue); }
+
+/* note */
+.dp-note {
+  background: rgba(255,149,0,0.07);
+  border: 1px solid rgba(255,149,0,0.2);
+  border-radius: var(--r-sm);
+  padding: var(--sp-sm) var(--sp-md);
+  font-size: 12px; font-weight: 400;
+  letter-spacing: -0.12px; color: #8a4800;
+  margin-top: var(--sp-sm);
+  line-height: 1.5;
+}
+
+/* ──────────────────────────────────────
+   TOOLTIP
+────────────────────────────────────── */
+.tooltip {
+  position: fixed; z-index: 9999; pointer-events: none;
+  background: rgba(0,0,0,0.75);
+  border-radius: var(--r-sm);
+  padding: 4px 10px;
+  font-size: 12px; font-weight: 400;
+  letter-spacing: -0.12px; color: var(--on-dark);
+  opacity: 0; transition: opacity .1s;
+  white-space: nowrap;
+}
+
+/* ──────────────────────────────────────
+   LEGEND  (bottom bar)
+────────────────────────────────────── */
+.legend {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 16px; align-items: center;
+  padding: 8px 20px;
+  background: rgba(245,245,247,0.88);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-pill);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  z-index: 100;
+}
+.li {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 400;
+  letter-spacing: -0.12px; color: var(--ink-48);
+}
+.ld { width: 10px; height: 10px; border-radius: 3px; }
+</style>
+
+<!-- ── SVG Icons (same paths, new color approach via currentColor) ── -->
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg"><defs>
+<symbol id="ic-internet" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round">
+  <circle cx="24" cy="24" r="20" stroke-width="2"/>
+  <ellipse cx="24" cy="24" rx="9" ry="20" stroke-width="1.8"/>
+  <path d="M4 24Q16 20 24 24Q32 28 44 24" stroke-width="1.6"/>
+  <path d="M6.5 16Q18 13 24 16Q30 19 41.5 16" stroke-width="1.4"/>
+  <path d="M6.5 32Q18 29 24 32Q30 35 41.5 32" stroke-width="1.4"/>
+  <line x1="24" y1="4" x2="24" y2="44" stroke-width="1.4"/>
+</symbol>
+<symbol id="ic-alb" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="14" y="4" width="20" height="14" rx="3" stroke-width="2"/>
+  <circle cx="24" cy="11" r="3" fill="currentColor" stroke="none"/>
+  <line x1="24" y1="18" x2="10" y2="30" stroke-width="2"/>
+  <line x1="24" y1="18" x2="24" y2="30" stroke-width="2"/>
+  <line x1="24" y1="18" x2="38" y2="30" stroke-width="2"/>
+  <rect x="4"  y="30" width="12" height="10" rx="2" stroke-width="2"/>
+  <rect x="18" y="30" width="12" height="10" rx="2" stroke-width="2"/>
+  <rect x="32" y="30" width="12" height="10" rx="2" stroke-width="2"/>
+</symbol>
+<symbol id="ic-eks" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round">
+  <circle cx="24" cy="24" r="9" stroke-width="2.4"/>
+  <circle cx="24" cy="24" r="3" fill="currentColor" stroke="none"/>
+  <line x1="24" y1="15" x2="24" y2="4"  stroke-width="2.6"/>
+  <line x1="24" y1="33" x2="24" y2="44" stroke-width="2.6"/>
+  <line x1="16.2" y1="19.5" x2="7"  y2="14" stroke-width="2.6"/>
+  <line x1="31.8" y1="28.5" x2="41" y2="34" stroke-width="2.6"/>
+  <line x1="31.8" y1="19.5" x2="41" y2="14" stroke-width="2.6"/>
+  <line x1="16.2" y1="28.5" x2="7"  y2="34" stroke-width="2.6"/>
+</symbol>
+<symbol id="ic-rds" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round">
+  <ellipse cx="24" cy="12" rx="16" ry="5.5" stroke-width="2"/>
+  <line x1="8"  y1="12" x2="8"  y2="36" stroke-width="2"/>
+  <line x1="40" y1="12" x2="40" y2="36" stroke-width="2"/>
+  <ellipse cx="24" cy="36" rx="16" ry="5.5" stroke-width="2"/>
+  <path d="M8 20Q24 24.5 40 20" stroke-width="1.4"/>
+  <path d="M8 28Q24 32.5 40 28" stroke-width="1.4"/>
+</symbol>
+<symbol id="ic-nat" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="6" y="6" width="36" height="36" rx="8" stroke-width="1.8"/>
+  <path d="M14 20L14 15L34 15" stroke-width="2.2"/>
+  <polyline points="30,12 34,15 30,18" stroke-width="2.2"/>
+  <path d="M34 28L34 33L14 33" stroke-width="2.2"/>
+  <polyline points="18,30 14,33 18,36" stroke-width="2.2"/>
+</symbol>
+<symbol id="ic-igw" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+  <line x1="16" y1="9"  x2="16" y2="39" stroke-width="2.8"/>
+  <line x1="32" y1="9"  x2="32" y2="39" stroke-width="2.8"/>
+  <line x1="4"  y1="24" x2="44" y2="24" stroke-width="2"/>
+  <polyline points="38,20 44,24 38,28" stroke-width="2"/>
+  <polyline points="10,20 4,24 10,28"  stroke-width="2"/>
+</symbol>
+<symbol id="ic-s3" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M10 18L13 40L35 40L38 18Z" stroke-width="2"/>
+  <ellipse cx="24" cy="18" rx="14" ry="4.5" stroke-width="2"/>
+  <ellipse cx="24" cy="26" rx="12"  ry="3"   stroke-width="1.4"/>
+  <ellipse cx="24" cy="33" rx="10.5" ry="3"  stroke-width="1.4"/>
+</symbol>
+<symbol id="ic-iam" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round">
+  <circle cx="24" cy="14" r="9" stroke-width="2"/>
+  <path d="M7 44C7 33 15 27 24 27C33 27 41 33 41 44" stroke-width="2"/>
+  <circle cx="36" cy="36" r="5" stroke-width="1.8"/>
+  <line x1="39.5" y1="32.5" x2="44" y2="27" stroke-width="1.8"/>
+  <line x1="42" y1="27" x2="45" y2="27" stroke-width="1.8"/>
+</symbol>
+<symbol id="ic-acm" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round">
+  <rect x="9" y="4" width="30" height="38" rx="4" stroke-width="2"/>
+  <line x1="15" y1="13" x2="33" y2="13" stroke-width="2"/>
+  <line x1="15" y1="20" x2="33" y2="20" stroke-width="2"/>
+  <line x1="15" y1="27" x2="24" y2="27" stroke-width="2"/>
+  <circle cx="28" cy="35" r="5" stroke-width="1.8"/>
+  <path d="M24 31.2C24 26 32 26 32 31.2" stroke-width="1.8"/>
+  <line x1="28" y1="33" x2="28" y2="36" stroke-width="1.8"/>
+</symbol>
+<symbol id="ic-sg" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M24 4L42 11L42 27C42 37 33 43 24 47C15 43 6 37 6 27L6 11Z" stroke-width="2.2"/>
+  <polyline points="15,26 21,33 33,18" stroke-width="2.6"/>
+</symbol>
+<symbol id="ic-node" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round">
+  <rect x="6" y="6" width="36" height="36" rx="6" stroke-width="2"/>
+  <rect x="11" y="12" width="26" height="7" rx="2" stroke-width="1.6"/>
+  <rect x="11" y="21" width="26" height="7" rx="2" stroke-width="1.6"/>
+  <rect x="11" y="30" width="26" height="7" rx="2" stroke-width="1.6"/>
+  <circle cx="14" cy="15.5" r="2" fill="currentColor" stroke="none"/>
+  <circle cx="14" cy="24.5" r="2" fill="currentColor" stroke="none"/>
+  <circle cx="14" cy="33.5" r="2" fill="currentColor" stroke="none"/>
+</symbol>
+<symbol id="ic-rt" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-linecap="round">
+  <rect x="5" y="8" width="38" height="32" rx="3" stroke-width="2"/>
+  <line x1="5"  y1="17" x2="43" y2="17" stroke-width="2"/>
+  <line x1="22" y1="8"  x2="22" y2="40" stroke-width="1.8"/>
+  <line x1="5"  y1="26" x2="43" y2="26" stroke-width="1.2"/>
+  <line x1="5"  y1="33" x2="43" y2="33" stroke-width="1.2"/>
+</symbol>
+</defs></svg>
+
+</head>
+<body>
+
+<!-- ─────────── GLOBAL NAV ─────────── -->
+<nav class="gnav">
+  <a class="gnav-logo" href="#">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+    </svg>
+    <span class="gnav-product">myapp</span>
+  </a>
+  <div class="gnav-links">
+    <a onclick="sd('internet')">Overview</a>
+    <a onclick="sd('eks')">EKS</a>
+    <a onclick="sd('rds')">RDS</a>
+    <a onclick="sd('s3')">Terraform State</a>
+  </div>
+  <div class="env-indicator">
+    <div class="env-indicator-dot" id="gnav-dot"></div>
+    <span class="env-indicator-label" id="gnav-label">Production</span>
+  </div>
+</nav>
+
+<!-- ─────────── SUB-NAV ─────────── -->
+<div class="subnav">
+  <span class="subnav-title">AWS Infrastructure</span>
+  <div class="subnav-links">
+    <a>ap-northeast-2 · Seoul</a>
+    <a>Kubernetes 1.29</a>
+    <a>PostgreSQL 15</a>
+    <a>3 Terraform Layers</a>
+  </div>
+  <button class="subnav-cta" onclick="sd('s3')">View State</button>
+</div>
+
+<!-- ─────────── ENV BAR ─────────── -->
+<div class="envbar">
+  <div class="seg">
+    <button class="seg-btn active" data-env="prod" onclick="setEnv('prod')">
+      <div class="seg-dot seg-dot-prod"></div>
+      <div class="seg-text">
+        <span class="seg-name">Production</span>
+        <span class="seg-desc">3 AZs · Multi-AZ RDS · On-Demand + Spot</span>
+      </div>
+    </button>
+    <button class="seg-btn" data-env="staging" onclick="setEnv('staging')">
+      <div class="seg-dot seg-dot-stg"></div>
+      <div class="seg-text">
+        <span class="seg-name">Staging</span>
+        <span class="seg-desc">2 AZs · Single-AZ RDS · Spot Only</span>
+      </div>
+    </button>
+    <button class="seg-btn" data-env="dev" onclick="setEnv('dev')">
+      <div class="seg-dot seg-dot-dev"></div>
+      <div class="seg-text">
+        <span class="seg-name">Dev</span>
+        <span class="seg-desc">1 AZ · No RDS · Spot Minimal</span>
+      </div>
+    </button>
+  </div>
+</div>
+
+<!-- ─────────── LAYOUT ─────────── -->
+<div class="layout">
+<div class="canvas-wrap">
+
+<!-- ══════════════ PROD ══════════════ -->
+<div id="prod-view" class="env-view on">
+
+  <!-- Internet -->
+  <div class="inet-row">
+    <div class="svc" onclick="sd('internet')" data-tt="Public internet traffic">
+      <div class="ic ic-dark"><svg viewBox="0 0 48 48"><use href="#ic-internet"/></svg></div>
+      <div class="svc-name">Internet</div>
+      <div class="svc-sub">Users</div>
+    </div>
+    <div class="svc" onclick="sd('acm')" data-tt="AWS Certificate Manager">
+      <div class="ic ic-sec"><svg viewBox="0 0 48 48"><use href="#ic-acm"/></svg></div>
+      <div class="svc-name">ACM</div>
+      <div class="svc-sub">TLS Certificate</div>
+    </div>
+  </div>
+
+  <!-- ① -->
+  <div class="row-c mt10">
+    <div class="flow">
+      <div class="step">1</div>
+      <div class="flow-label">HTTP :80 / HTTPS :443</div>
+      <div class="vline"></div>
+      <div class="arrow"></div>
+    </div>
+  </div>
+
+  <!-- AWS Cloud -->
+  <div class="zone z-cloud mt10">
+    <div class="row-b" style="margin-bottom:16px;">
+      <div class="row-g8">
+        <div class="zlabel">AWS Cloud · ap-northeast-2</div>
+        <div class="tf-chip">Terraform Managed</div>
+      </div>
+      <div class="row-g6">
+        <div class="dot-ok"></div>
+        <span style="font-size:12px;color:#1e7e34;font-weight:600;letter-spacing:-0.12px;">Running</span>
+      </div>
+    </div>
+
+    <!-- VPC -->
+    <div class="zone z-vpc">
+      <div class="row-b" style="margin-bottom:14px;">
+        <div class="row-g8">
+          <div class="zlabel" style="margin-bottom:0;">VPC · myapp-prod · 10.0.0.0/16</div>
+          <div class="tf-chip">10-networking</div>
+        </div>
+        <div class="svc" onclick="sd('igw')" data-tt="Internet Gateway"
+             style="flex-direction:row;gap:8px;padding:10px 14px;min-width:unset;border-radius:14px;">
+          <div class="ic ic-net" style="width:32px;height:32px;border-radius:9px;">
+            <svg viewBox="0 0 48 48" style="width:20px;height:20px;"><use href="#ic-igw"/></svg>
+          </div>
+          <div>
+            <div class="svc-name" style="text-align:left;font-size:12px;">Internet Gateway</div>
+            <div class="svc-sub" style="text-align:left;">myapp-prod-igw</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Public Subnet -->
+      <div class="zone z-pub">
+        <div class="row-b" style="margin-bottom:12px;">
+          <div class="zlabel" style="margin-bottom:0;">Public Subnets</div>
+          <span style="font-size:11px;color:var(--ink-48);letter-spacing:-0.12px;">map_public_ip=true · kubernetes.io/role/elb=1</span>
+        </div>
+
+        <div class="az-row">
+          <div class="az-col">
+            <div class="az-hd"><strong>ap-northeast-2a</strong><br>10.0.0.0/24</div>
+            <div class="svc" onclick="sd('nat-a')" data-tt="NAT Gateway ap-northeast-2a"
+                 style="width:100%;min-width:unset;border-radius:14px;">
+              <div class="ic ic-net" style="width:38px;height:38px;border-radius:10px;">
+                <svg viewBox="0 0 48 48" style="width:22px;height:22px;"><use href="#ic-nat"/></svg>
+              </div>
+              <div class="svc-name">NAT Gateway</div>
+              <div class="svc-sub">EIP ①</div>
+            </div>
+          </div>
+          <div class="az-col">
+            <div class="az-hd"><strong>ap-northeast-2b</strong><br>10.0.1.0/24</div>
+            <div class="svc" onclick="sd('nat-b')" data-tt="NAT Gateway ap-northeast-2b"
+                 style="width:100%;min-width:unset;border-radius:14px;">
+              <div class="ic ic-net" style="width:38px;height:38px;border-radius:10px;">
+                <svg viewBox="0 0 48 48" style="width:22px;height:22px;"><use href="#ic-nat"/></svg>
+              </div>
+              <div class="svc-name">NAT Gateway</div>
+              <div class="svc-sub">EIP ②</div>
+            </div>
+          </div>
+          <div class="az-col">
+            <div class="az-hd"><strong>ap-northeast-2c</strong><br>10.0.2.0/24</div>
+            <div class="svc" onclick="sd('nat-c')" data-tt="NAT Gateway ap-northeast-2c"
+                 style="width:100%;min-width:unset;border-radius:14px;">
+              <div class="ic ic-net" style="width:38px;height:38px;border-radius:10px;">
+                <svg viewBox="0 0 48 48" style="width:22px;height:22px;"><use href="#ic-nat"/></svg>
+              </div>
+              <div class="svc-name">NAT Gateway</div>
+              <div class="svc-sub">EIP ③</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ALB -->
+        <div class="svc svc-h mt10" onclick="sd('alb')" data-tt="Application Load Balancer — internet-facing">
+          <div class="ic ic-net" style="width:52px;height:52px;border-radius:14px;flex-shrink:0;">
+            <svg viewBox="0 0 48 48" style="width:32px;height:32px;"><use href="#ic-alb"/></svg>
+          </div>
+          <div class="svc-meta">
+            <div class="svc-name">Elastic Load Balancing</div>
+            <div class="svc-sub" style="margin-bottom:7px;">myapp-prod-alb · internet-facing · 3 AZs</div>
+            <div class="badges">
+              <span class="badge badge-err">:80 → 301</span>
+              <span class="badge badge-ok">:443 HTTPS</span>
+              <span class="badge badge-blue">TLS 1.3</span>
+              <span class="badge">ACM Cert</span>
+              <span class="badge">Target: IP</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;flex-shrink:0;">
+            <div class="tf-chip">30-application</div>
+            <div class="badge badge-err" style="font-size:10px;">SG: alb-sg</div>
+          </div>
+        </div>
+      </div><!-- /public -->
+
+      <!-- ② -->
+      <div class="row-c" style="margin:8px 0;">
+        <div class="flow">
+          <div class="step">2</div>
+          <div class="flow-label">Forward → EKS Pods</div>
+          <div class="vline"></div>
+          <div class="arrow"></div>
+        </div>
+      </div>
+
+      <!-- Private Subnet -->
+      <div class="zone z-priv">
+        <div class="row-b" style="margin-bottom:10px;">
+          <div class="zlabel" style="margin-bottom:0;">Private Subnets</div>
+          <span style="font-size:11px;color:var(--ink-48);letter-spacing:-0.12px;">NAT outbound · kubernetes.io/role/internal-elb=1</span>
+        </div>
+
+        <div class="az-row" style="margin-bottom:12px;">
+          <div class="az-col" style="padding:8px 12px;">
+            <div class="az-hd" style="margin-bottom:0;">ap-northeast-2a · <strong>10.0.10.0/24</strong></div>
+          </div>
+          <div class="az-col" style="padding:8px 12px;">
+            <div class="az-hd" style="margin-bottom:0;">ap-northeast-2b · <strong>10.0.11.0/24</strong></div>
+          </div>
+          <div class="az-col" style="padding:8px 12px;">
+            <div class="az-hd" style="margin-bottom:0;">ap-northeast-2c · <strong>10.0.12.0/24</strong></div>
+          </div>
+        </div>
+
+        <!-- EKS -->
+        <div class="eks-card" onclick="sd('eks')">
+          <div class="eks-hd">
+            <div class="ic ic-cmp" style="width:44px;height:44px;border-radius:12px;flex-shrink:0;">
+              <svg viewBox="0 0 48 48" style="width:26px;height:26px;"><use href="#ic-eks"/></svg>
+            </div>
+            <div style="flex:1;">
+              <div class="eks-title">Amazon EKS</div>
+              <div class="eks-title sub">myapp-prod-cluster · Kubernetes 1.29</div>
+            </div>
+            <div class="row-g6">
+              <div class="tf-chip">30-application</div>
+              <div class="badge badge-err" style="font-size:10px;">SG: eks-nodes-sg</div>
+            </div>
+          </div>
+
+          <div class="ng-row">
+            <div class="ng" onclick="event.stopPropagation();sd('ng-od')">
+              <div class="ng-hd">
+                <span class="type">On-Demand</span>
+                <div class="badge badge-ok" style="font-size:10px;">m5.large</div>
+              </div>
+              <div class="nodes">
+                <div class="node" data-tt="Worker Node 1"><svg viewBox="0 0 48 48"><use href="#ic-node"/></svg></div>
+                <div class="node" data-tt="Worker Node 2"><svg viewBox="0 0 48 48"><use href="#ic-node"/></svg></div>
+                <div class="node" data-tt="Worker Node 3"><svg viewBox="0 0 48 48"><use href="#ic-node"/></svg></div>
+              </div>
+              <div class="ng-foot">desired: 3 · min: 3 · max: 10</div>
+            </div>
+            <div class="ng" onclick="event.stopPropagation();sd('ng-spot')">
+              <div class="ng-hd">
+                <span class="type">Spot</span>
+                <div class="badge badge-warn" style="font-size:10px;">m5/m5a/m4.large</div>
+              </div>
+              <div class="nodes">
+                <div class="node spot" data-tt="Spot Node 1"><svg viewBox="0 0 48 48"><use href="#ic-node"/></svg></div>
+                <div class="node spot" data-tt="Spot Node 2"><svg viewBox="0 0 48 48"><use href="#ic-node"/></svg></div>
+              </div>
+              <div class="ng-foot">desired: 2 · min: 0 · max: 5</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ③ -->
+        <div class="row-c" style="margin:8px 0;">
+          <div class="flow">
+            <div class="step">3</div>
+            <div class="flow-label">PostgreSQL · :5432</div>
+            <div class="vline"></div>
+            <div class="arrow"></div>
+          </div>
+        </div>
+
+        <!-- RDS -->
+        <div class="rds-card" onclick="sd('rds')">
+          <div class="ic ic-db" style="width:52px;height:52px;border-radius:14px;flex-shrink:0;">
+            <svg viewBox="0 0 48 48" style="width:32px;height:32px;"><use href="#ic-rds"/></svg>
+          </div>
+          <div style="flex:1;">
+            <div class="rds-title">Amazon RDS · PostgreSQL 15 · myapp-prod-db</div>
+            <div class="badges">
+              <span class="badge badge-ok">Multi-AZ</span>
+              <span class="badge badge-ok">gp3 Encrypted</span>
+              <span class="badge">db.r6g.large</span>
+              <span class="badge">100 → 300 GB</span>
+              <span class="badge">7d Backup</span>
+              <span class="badge badge-ok">Perf Insights</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;flex-shrink:0;">
+            <div class="tf-chip">30-application</div>
+            <div class="badge badge-err" style="font-size:10px;">SG: rds-sg</div>
+            <div class="badge badge-err" style="font-size:10px;">Deletion Protected</div>
+          </div>
+        </div>
+      </div><!-- /private -->
+
+      <!-- Security Groups -->
+      <div class="sg-section" onclick="sd('sg-all')">
+        <div class="row-b">
+          <div class="row-g8">
+            <div class="zlabel" style="margin-bottom:0;">Security Groups</div>
+            <div class="tf-chip">20-security</div>
+          </div>
+        </div>
+        <div class="sg-row" onclick="event.stopPropagation()">
+          <div class="sg-card" onclick="sd('sg-alb')">
+            <div class="sg-name">
+              <div class="ic-sm"><svg viewBox="0 0 48 48"><use href="#ic-sg"/></svg></div>
+              alb-sg
+            </div>
+            <div class="rule">IN <em>:80</em> ← 0.0.0.0/0</div>
+            <div class="rule">IN <em>:443</em> ← 0.0.0.0/0</div>
+            <div class="rule">OUT all → 0.0.0.0/0</div>
+          </div>
+          <div class="sg-card" onclick="sd('sg-eks')">
+            <div class="sg-name">
+              <div class="ic-sm"><svg viewBox="0 0 48 48"><use href="#ic-sg"/></svg></div>
+              eks-nodes-sg
+            </div>
+            <div class="rule">IN <em>0-65535</em> ← alb-sg</div>
+            <div class="rule">IN <em>all</em> ← self</div>
+            <div class="rule">OUT all → 0.0.0.0/0</div>
+          </div>
+          <div class="sg-card" onclick="sd('sg-rds')">
+            <div class="sg-name">
+              <div class="ic-sm"><svg viewBox="0 0 48 48"><use href="#ic-sg"/></svg></div>
+              rds-sg
+            </div>
+            <div class="rule">IN <em>:5432</em> ← eks-nodes-sg</div>
+            <div class="rule">OUT all → 0.0.0.0/0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom -->
+      <div class="bottom-row">
+        <div class="s3-card" onclick="sd('s3')">
+          <div class="ic ic-str" style="width:44px;height:44px;border-radius:12px;flex-shrink:0;">
+            <svg viewBox="0 0 48 48" style="width:28px;height:28px;"><use href="#ic-s3"/></svg>
+          </div>
+          <div style="flex:1;">
+            <div class="s3-label">Terraform Remote State</div>
+            <div class="s3-name">myapp-tfstate-prod</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;">
+            <span class="badge" style="font-size:10px;">prod/networking/</span>
+            <span class="badge" style="font-size:10px;">prod/security/</span>
+            <span class="badge" style="font-size:10px;">prod/application/</span>
+          </div>
+        </div>
+        <div class="svc" onclick="sd('iam')" data-tt="IAM Roles" style="min-width:100px;flex-shrink:0;border-radius:var(--r-lg);">
+          <div class="ic ic-sec"><svg viewBox="0 0 48 48"><use href="#ic-iam"/></svg></div>
+          <div class="svc-name">IAM</div>
+          <div class="svc-sub">cluster + node</div>
+        </div>
+        <div class="svc" onclick="sd('rt')" data-tt="Route Tables" style="min-width:100px;flex-shrink:0;border-radius:var(--r-lg);">
+          <div class="ic ic-net"><svg viewBox="0 0 48 48"><use href="#ic-rt"/></svg></div>
+          <div class="svc-name">Route Tables</div>
+          <div class="svc-sub">pub + priv × 3</div>
+        </div>
+      </div>
+
+    </div><!-- /vpc -->
+  </div><!-- /cloud -->
+</div><!-- /prod -->
+
+
+<!-- ══════════════ STAGING ══════════════ -->
+<div id="staging-view" class="env-view">
+
+  <div class="inet-row">
+    <div class="svc" onclick="sd('internet')" data-tt="Public internet traffic">
+      <div class="ic ic-dark"><svg viewBox="0 0 48 48"><use href="#ic-internet"/></svg></div>
+      <div class="svc-name">Internet</div>
+      <div class="svc-sub">Users</div>
+    </div>
+  </div>
+
+  <div class="row-c mt10">
+    <div class="flow">
+      <div class="step">1</div>
+      <div class="flow-label">HTTP :80 (No TLS)</div>
+      <div class="vline"></div>
+      <div class="arrow"></div>
+    </div>
+  </div>
+
+  <div class="zone z-cloud mt10" style="background:#f9f9fb;">
+    <div class="row-b" style="margin-bottom:16px;">
+      <div class="row-g8">
+        <div class="zlabel">AWS Cloud · ap-northeast-2 · Staging</div>
+        <div class="tf-chip">Terraform Managed</div>
+      </div>
+      <div class="row-g6">
+        <div class="dot-ok dot-stg"></div>
+        <span style="font-size:12px;color:#b05a00;font-weight:600;letter-spacing:-0.12px;">Staging</span>
+      </div>
+    </div>
+
+    <div class="zone z-vpc" style="background:#f5f5f7;">
+      <div class="row-b" style="margin-bottom:14px;">
+        <div class="row-g8">
+          <div class="zlabel" style="margin-bottom:0;">VPC · myapp-staging · 10.20.0.0/16</div>
+          <div class="tf-chip">10-networking</div>
+        </div>
+        <div class="svc" onclick="sd('igw-stg')" data-tt="Internet Gateway"
+             style="flex-direction:row;gap:8px;padding:10px 14px;min-width:unset;border-radius:14px;">
+          <div class="ic ic-net" style="width:32px;height:32px;border-radius:9px;">
+            <svg viewBox="0 0 48 48" style="width:20px;height:20px;"><use href="#ic-igw"/></svg>
+          </div>
+          <div><div class="svc-name" style="text-align:left;font-size:12px;">Internet Gateway</div></div>
+        </div>
+      </div>
+
+      <div class="zone z-pub">
+        <div class="row-b" style="margin-bottom:12px;">
+          <div class="zlabel" style="margin-bottom:0;">Public Subnets · 2 AZs</div>
+        </div>
+        <div class="az-row">
+          <div class="az-col">
+            <div class="az-hd"><strong>ap-northeast-2a</strong><br>10.20.0.0/24</div>
+            <div class="svc" onclick="sd('nat-stg')" data-tt="NAT Gateway"
+                 style="width:100%;min-width:unset;border-radius:14px;">
+              <div class="ic ic-net" style="width:38px;height:38px;border-radius:10px;">
+                <svg viewBox="0 0 48 48" style="width:22px;height:22px;"><use href="#ic-nat"/></svg>
+              </div>
+              <div class="svc-name">NAT Gateway</div>
+              <div class="svc-sub">EIP ①</div>
+            </div>
+          </div>
+          <div class="az-col">
+            <div class="az-hd"><strong>ap-northeast-2c</strong><br>10.20.1.0/24</div>
+            <div class="svc" onclick="sd('nat-stg')" data-tt="NAT Gateway"
+                 style="width:100%;min-width:unset;border-radius:14px;">
+              <div class="ic ic-net" style="width:38px;height:38px;border-radius:10px;">
+                <svg viewBox="0 0 48 48" style="width:22px;height:22px;"><use href="#ic-nat"/></svg>
+              </div>
+              <div class="svc-name">NAT Gateway</div>
+              <div class="svc-sub">EIP ②</div>
+            </div>
+          </div>
+        </div>
+        <div class="svc svc-h mt10" onclick="sd('alb-stg')">
+          <div class="ic ic-net" style="width:52px;height:52px;border-radius:14px;flex-shrink:0;">
+            <svg viewBox="0 0 48 48" style="width:32px;height:32px;"><use href="#ic-alb"/></svg>
+          </div>
+          <div class="svc-meta">
+            <div class="svc-name">Elastic Load Balancing</div>
+            <div class="svc-sub" style="margin-bottom:7px;">myapp-staging-alb · 2 AZs</div>
+            <div class="badges">
+              <span class="badge badge-blue">:80 HTTP</span>
+              <span class="badge badge-warn">No TLS</span>
+              <span class="badge badge-warn">No Deletion Prot.</span>
+            </div>
+          </div>
+          <div class="tf-chip">30-application</div>
+        </div>
+      </div>
+
+      <div class="row-c" style="margin:8px 0;">
+        <div class="flow">
+          <div class="step">2</div>
+          <div class="flow-label">Forward → EKS Pods</div>
+          <div class="vline"></div>
+          <div class="arrow"></div>
+        </div>
+      </div>
+
+      <div class="zone z-priv">
+        <div class="row-b" style="margin-bottom:10px;">
+          <div class="zlabel" style="margin-bottom:0;">Private Subnets · 2 AZs</div>
+        </div>
+        <div class="az-row" style="margin-bottom:12px;">
+          <div class="az-col" style="padding:8px 12px;">
+            <div class="az-hd" style="margin-bottom:0;">ap-northeast-2a · <strong>10.20.10.0/24</strong></div>
+          </div>
+          <div class="az-col" style="padding:8px 12px;">
+            <div class="az-hd" style="margin-bottom:0;">ap-northeast-2c · <strong>10.20.11.0/24</strong></div>
+          </div>
+        </div>
+
+        <div class="eks-card" onclick="sd('eks-stg')">
+          <div class="eks-hd">
+            <div class="ic ic-cmp" style="width:44px;height:44px;border-radius:12px;flex-shrink:0;">
+              <svg viewBox="0 0 48 48" style="width:26px;height:26px;"><use href="#ic-eks"/></svg>
+            </div>
+            <div style="flex:1;">
+              <div class="eks-title">Amazon EKS</div>
+              <div class="eks-title sub">myapp-staging-cluster · Kubernetes 1.29</div>
+            </div>
+            <div class="tf-chip">30-application</div>
+          </div>
+          <div class="ng-row" style="max-width:380px;">
+            <div class="ng" onclick="event.stopPropagation();sd('ng-stg-spot')">
+              <div class="ng-hd"><span class="type">Spot Only</span><div class="badge badge-warn" style="font-size:10px;">t3.medium</div></div>
+              <div class="nodes">
+                <div class="node spot"><svg viewBox="0 0 48 48"><use href="#ic-node"/></svg></div>
+                <div class="node spot"><svg viewBox="0 0 48 48"><use href="#ic-node"/></svg></div>
+              </div>
+              <div class="ng-foot">desired: 2 · min: 1 · max: 5</div>
+            </div>
+            <div style="flex:1;border-radius:14px;border:1px solid var(--hairline);background:var(--canvas);padding:14px;display:flex;align-items:center;justify-content:center;">
+              <div style="text-align:center;">
+                <div style="font-size:12px;color:var(--ink-48);letter-spacing:-0.12px;">On-Demand 없음</div>
+                <div style="font-size:11px;color:#b05a00;margin-top:3px;">비용 최적화</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row-c" style="margin:8px 0;">
+          <div class="flow">
+            <div class="step">3</div>
+            <div class="flow-label">PostgreSQL · :5432</div>
+            <div class="vline"></div>
+            <div class="arrow"></div>
+          </div>
+        </div>
+
+        <div class="rds-card" onclick="sd('rds-stg')">
+          <div class="ic ic-db" style="width:52px;height:52px;border-radius:14px;flex-shrink:0;">
+            <svg viewBox="0 0 48 48" style="width:32px;height:32px;"><use href="#ic-rds"/></svg>
+          </div>
+          <div style="flex:1;">
+            <div class="rds-title">Amazon RDS · PostgreSQL 15 · myapp-staging-db</div>
+            <div class="badges">
+              <span class="badge badge-warn">Single-AZ</span>
+              <span class="badge badge-ok">gp3 Encrypted</span>
+              <span class="badge">db.t4g.medium</span>
+              <span class="badge">20 GB</span>
+              <span class="badge badge-err">No Deletion Prot.</span>
+            </div>
+          </div>
+          <div class="tf-chip">30-application</div>
+        </div>
+      </div><!-- /private-stg -->
+
+      <div class="sg-section mt12">
+        <div class="row-g8">
+          <div class="zlabel" style="margin-bottom:8px;">Security Groups</div>
+          <div class="tf-chip" style="margin-bottom:8px;">20-security</div>
+        </div>
+        <div class="sg-row">
+          <div class="sg-card" onclick="sd('sg-alb')">
+            <div class="sg-name"><div class="ic-sm"><svg viewBox="0 0 48 48"><use href="#ic-sg"/></svg></div>alb-sg</div>
+            <div class="rule">IN <em>:80</em> ← 0.0.0.0/0</div>
+          </div>
+          <div class="sg-card" onclick="sd('sg-eks')">
+            <div class="sg-name"><div class="ic-sm"><svg viewBox="0 0 48 48"><use href="#ic-sg"/></svg></div>eks-nodes-sg</div>
+            <div class="rule">IN from alb-sg + self</div>
+          </div>
+          <div class="sg-card" onclick="sd('sg-rds')">
+            <div class="sg-name"><div class="ic-sm"><svg viewBox="0 0 48 48"><use href="#ic-sg"/></svg></div>rds-sg</div>
+            <div class="rule">IN <em>:5432</em> ← eks-nodes-sg</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom-row">
+        <div class="s3-card" onclick="sd('s3-stg')">
+          <div class="ic ic-str" style="width:44px;height:44px;border-radius:12px;flex-shrink:0;">
+            <svg viewBox="0 0 48 48" style="width:28px;height:28px;"><use href="#ic-s3"/></svg>
+          </div>
+          <div>
+            <div class="s3-label">Terraform Remote State</div>
+            <div class="s3-name">myapp-tfstate-staging</div>
+          </div>
+        </div>
+        <div class="svc" onclick="sd('iam')" data-tt="IAM Roles" style="min-width:100px;flex-shrink:0;">
+          <div class="ic ic-sec"><svg viewBox="0 0 48 48"><use href="#ic-iam"/></svg></div>
+          <div class="svc-name">IAM</div>
+          <div class="svc-sub">cluster + node</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div><!-- /staging -->
+
+
+<!-- ══════════════ DEV ══════════════ -->
+<div id="dev-view" class="env-view">
+
+  <div class="inet-row">
+    <div class="svc" onclick="sd('internet')" data-tt="Public internet traffic">
+      <div class="ic ic-dark"><svg viewBox="0 0 48 48"><use href="#ic-internet"/></svg></div>
+      <div class="svc-name">Internet</div>
+      <div class="svc-sub">Users</div>
+    </div>
+  </div>
+
+  <div class="row-c mt10">
+    <div class="flow">
+      <div class="step">1</div>
+      <div class="flow-label">HTTP :80 (개발 전용)</div>
+      <div class="vline"></div>
+      <div class="arrow"></div>
+    </div>
+  </div>
+
+  <div class="zone z-cloud mt10" style="background:#f9f9fb;">
+    <div class="row-b" style="margin-bottom:16px;">
+      <div class="row-g8">
+        <div class="zlabel">AWS Cloud · ap-northeast-2 · Dev</div>
+        <div class="tf-chip">Terraform Managed</div>
+      </div>
+      <div class="row-g6">
+        <div class="dot-ok" style="background:#5856d6;"></div>
+        <span style="font-size:12px;color:#5856d6;font-weight:600;letter-spacing:-0.12px;">Dev</span>
+      </div>
+    </div>
+
+    <div class="zone z-vpc" style="background:#f5f5f7;">
+      <div class="row-b" style="margin-bottom:14px;">
+        <div class="row-g8">
+          <div class="zlabel" style="margin-bottom:0;">VPC · myapp-dev · 10.30.0.0/16</div>
+          <div class="tf-chip">10-networking</div>
+        </div>
+        <div class="svc" onclick="sd('igw-dev')" data-tt="Internet Gateway"
+             style="flex-direction:row;gap:8px;padding:10px 14px;min-width:unset;border-radius:14px;">
+          <div class="ic ic-net" style="width:32px;height:32px;border-radius:9px;">
+            <svg viewBox="0 0 48 48" style="width:20px;height:20px;"><use href="#ic-igw"/></svg>
+          </div>
+          <div><div class="svc-name" style="text-align:left;font-size:12px;">Internet Gateway</div></div>
+        </div>
+      </div>
+
+      <div class="zone z-pub">
+        <div class="row-b" style="margin-bottom:12px;">
+          <div class="zlabel" style="margin-bottom:0;">Public Subnet · 1 AZ</div>
+          <span style="font-size:11px;color:var(--ink-48);letter-spacing:-0.12px;">비용 최소화</span>
+        </div>
+        <div style="max-width:280px;">
+          <div class="az-col">
+            <div class="az-hd"><strong>ap-northeast-2a</strong><br>10.30.0.0/24</div>
+            <div class="svc" onclick="sd('nat-dev')" data-tt="NAT Gateway (dev)"
+                 style="width:100%;min-width:unset;border-radius:14px;">
+              <div class="ic ic-net" style="width:38px;height:38px;border-radius:10px;">
+                <svg viewBox="0 0 48 48" style="width:22px;height:22px;"><use href="#ic-nat"/></svg>
+              </div>
+              <div class="svc-name">NAT Gateway</div>
+              <div class="svc-sub">EIP ① (공유)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- No ALB in dev - note card -->
+        <div style="margin-top:10px;padding:12px 16px;border-radius:14px;border:1px dashed rgba(88,86,214,0.3);background:rgba(88,86,214,0.04);">
+          <div style="font-size:12px;font-weight:600;color:#5856d6;letter-spacing:-0.12px;margin-bottom:4px;">ALB 없음</div>
+          <div style="font-size:11px;color:var(--ink-48);letter-spacing:-0.12px;">개발 환경은 LoadBalancer 서비스 또는<br>NodePort + kubectl port-forward로 접근</div>
+        </div>
+      </div>
+
+      <div class="row-c" style="margin:8px 0;">
+        <div class="flow">
+          <div class="step">2</div>
+          <div class="flow-label">NodePort / kubectl</div>
+          <div class="vline"></div>
+          <div class="arrow"></div>
+        </div>
+      </div>
+
+      <div class="zone z-priv">
+        <div class="row-b" style="margin-bottom:10px;">
+          <div class="zlabel" style="margin-bottom:0;">Private Subnet · 1 AZ</div>
+        </div>
+        <div style="max-width:280px;margin-bottom:12px;">
+          <div class="az-col" style="padding:8px 12px;">
+            <div class="az-hd" style="margin-bottom:0;">ap-northeast-2a · <strong>10.30.10.0/24</strong></div>
+          </div>
+        </div>
+
+        <div class="eks-card" onclick="sd('eks-dev')">
+          <div class="eks-hd">
+            <div class="ic ic-cmp" style="width:44px;height:44px;border-radius:12px;flex-shrink:0;">
+              <svg viewBox="0 0 48 48" style="width:26px;height:26px;"><use href="#ic-eks"/></svg>
+            </div>
+            <div style="flex:1;">
+              <div class="eks-title">Amazon EKS</div>
+              <div class="eks-title sub">myapp-dev-cluster · Kubernetes 1.29</div>
+            </div>
+            <div class="tf-chip">30-application</div>
+          </div>
+          <div class="ng-row" style="max-width:380px;">
+            <div class="ng" onclick="event.stopPropagation();sd('ng-dev-spot')">
+              <div class="ng-hd"><span class="type">Spot Only</span><div class="badge badge-warn" style="font-size:10px;">t3.small</div></div>
+              <div class="nodes">
+                <div class="node spot"><svg viewBox="0 0 48 48"><use href="#ic-node"/></svg></div>
+              </div>
+              <div class="ng-foot">desired: 1 · min: 1 · max: 3</div>
+            </div>
+            <div style="flex:1;border-radius:14px;border:1px solid var(--hairline);background:var(--canvas);padding:14px;display:flex;align-items:center;justify-content:center;">
+              <div style="text-align:center;">
+                <div style="font-size:12px;color:var(--ink-48);letter-spacing:-0.12px;">최소 리소스</div>
+                <div style="font-size:11px;color:#5856d6;margin-top:3px;font-weight:600;">비용 ≈ $0/day idle</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- No RDS — SQLite or shared dev DB note -->
+        <div style="margin-top:10px;display:flex;gap:10px;align-items:center;padding:14px 16px;border-radius:var(--r-lg);border:1px dashed rgba(88,86,214,0.3);background:rgba(88,86,214,0.04);cursor:pointer;" onclick="sd('rds-dev')">
+          <div class="ic ic-db" style="width:44px;height:44px;border-radius:12px;flex-shrink:0;opacity:0.5;">
+            <svg viewBox="0 0 48 48" style="width:28px;height:28px;"><use href="#ic-rds"/></svg>
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:600;color:#5856d6;letter-spacing:-0.2px;margin-bottom:4px;">RDS 없음 (선택적)</div>
+            <div class="badges">
+              <span class="badge" style="border-color:rgba(88,86,214,0.25);color:#5856d6;background:rgba(88,86,214,0.06);">Staging DB 공유</span>
+              <span class="badge badge-warn">또는 로컬 PG</span>
+              <span class="badge">db.t4g.micro 옵션</span>
+            </div>
+          </div>
+          <div class="tf-chip">선택사항</div>
+        </div>
+      </div><!-- /private-dev -->
+
+      <div class="sg-section mt12">
+        <div class="row-g8">
+          <div class="zlabel" style="margin-bottom:8px;">Security Groups</div>
+          <div class="tf-chip" style="margin-bottom:8px;">20-security</div>
+        </div>
+        <div class="sg-row">
+          <div class="sg-card" onclick="sd('sg-dev-eks')">
+            <div class="sg-name"><div class="ic-sm"><svg viewBox="0 0 48 48"><use href="#ic-sg"/></svg></div>eks-nodes-sg</div>
+            <div class="rule">IN <em>:30000-32767</em> ← 0.0.0.0/0</div>
+            <div class="rule">IN <em>all</em> ← self</div>
+          </div>
+          <div class="sg-card" onclick="sd('sg-dev-rds')">
+            <div class="sg-name"><div class="ic-sm"><svg viewBox="0 0 48 48"><use href="#ic-sg"/></svg></div>rds-sg (옵션)</div>
+            <div class="rule">IN <em>:5432</em> ← eks-nodes-sg</div>
+            <div class="rule" style="color:#5856d6;">미배포 시 불필요</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottom-row">
+        <div class="s3-card" onclick="sd('s3-dev')">
+          <div class="ic ic-str" style="width:44px;height:44px;border-radius:12px;flex-shrink:0;">
+            <svg viewBox="0 0 48 48" style="width:28px;height:28px;"><use href="#ic-s3"/></svg>
+          </div>
+          <div>
+            <div class="s3-label">Terraform Remote State</div>
+            <div class="s3-name">myapp-tfstate-dev</div>
+          </div>
+        </div>
+        <div class="svc" onclick="sd('iam')" data-tt="IAM Roles" style="min-width:100px;flex-shrink:0;">
+          <div class="ic ic-sec"><svg viewBox="0 0 48 48"><use href="#ic-iam"/></svg></div>
+          <div class="svc-name">IAM</div>
+          <div class="svc-sub">cluster + node</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div><!-- /dev -->
+
+<div style="height:100px;"></div>
+</div><!-- /canvas-wrap -->
+
+<!-- Detail Panel -->
+<div class="dp" id="dp"><div class="dp-scroll" id="dps"></div></div>
+</div><!-- /layout -->
+
+<!-- Tooltip -->
+<div class="tooltip" id="tt"></div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="li"><div class="ld" style="background:rgba(110,54,245,0.25);border:1px solid rgba(110,54,245,0.3);"></div>Networking</div>
+  <div class="li"><div class="ld" style="background:rgba(212,88,15,0.25);border:1px solid rgba(212,88,15,0.3);"></div>Compute / EKS</div>
+  <div class="li"><div class="ld" style="background:rgba(26,94,184,0.25);border:1px solid rgba(26,94,184,0.3);"></div>Database</div>
+  <div class="li"><div class="ld" style="background:rgba(30,126,52,0.25);border:1px solid rgba(30,126,52,0.3);"></div>Storage</div>
+  <div class="li"><div class="ld" style="background:rgba(193,18,43,0.25);border:1px solid rgba(193,18,43,0.3);"></div>Security</div>
+  <div class="li" style="margin-left:4px;">
+    <div class="ld" style="background:var(--canvas);border:1px solid var(--hairline);"></div>AWS Cloud
+  </div>
+  <div class="li">
+    <div class="ld" style="background:#f0f6ff;border:1px solid rgba(0,0,0,0.08);"></div>Private Subnet
+  </div>
+</div>
+
+<script>
+const D = {
+  internet:{bg:'rgba(0,0,0,0.06)',ci:'var(--ink-48)',ic:'#ic-internet',t:'Internet / Users',s:'Public internet entry point',
+    secs:[{t:'TRAFFIC',rows:[{k:'HTTP',v:':80 → ALB',c:'vr'},{k:'HTTPS',v:':443 → ALB',c:'vg'},{k:'DNS',v:'Route 53 (별도 구성)',c:''}]}]},
+  acm:{bg:'rgba(193,18,43,0.08)',ci:'var(--c-sec)',ic:'#ic-acm',t:'AWS Certificate Manager',s:'TLS/SSL 인증서',
+    secs:[{t:'CERTIFICATE',rows:[{k:'SSL Policy',v:'ELBSecurityPolicy-TLS13-1-2-2021-06',c:'vg'},{k:'Protocol',v:'TLSv1.3',c:'vg'},{k:'Status',v:'⚠ REPLACE_WITH_ACTUAL',c:'vr'}]}],
+    note:'terraform.tfvars의 certificate_arn을 실제 ACM ARN으로 교체하세요.'},
+  igw:{bg:'rgba(110,54,245,0.08)',ci:'var(--c-net)',ic:'#ic-igw',t:'Internet Gateway',s:'myapp-prod-igw',
+    secs:[{t:'CONFIGURATION',rows:[{k:'VPC',v:'10.0.0.0/16',c:'vb'},{k:'Route',v:'0.0.0.0/0 → IGW',c:'vg'},{k:'Resource',v:'aws_internet_gateway.this',c:'vn'},{k:'Layer',v:'10-networking',c:''}]}]},
+  'igw-stg':{bg:'rgba(110,54,245,0.08)',ci:'var(--c-net)',ic:'#ic-igw',t:'Internet Gateway · Staging',s:'myapp-staging-igw',
+    secs:[{t:'CONFIGURATION',rows:[{k:'VPC',v:'10.20.0.0/16',c:'vb'},{k:'Layer',v:'10-networking',c:''}]}]},
+  'nat-a':{bg:'rgba(110,54,245,0.08)',ci:'var(--c-net)',ic:'#ic-nat',t:'NAT Gateway · AZ-a',s:'myapp-prod-nat-1',
+    secs:[{t:'CONFIGURATION',rows:[{k:'Subnet',v:'10.0.0.0/24',c:'vg'},{k:'AZ',v:'ap-northeast-2a',c:'vb'},{k:'EIP',v:'myapp-prod-nat-eip-1',c:''},{k:'Route',v:'0.0.0.0/0 → this NAT',c:'vg'},{k:'Resource',v:'aws_nat_gateway.this[0]',c:'vn'},{k:'Layer',v:'10-networking',c:''}]}]},
+  'nat-b':{bg:'rgba(110,54,245,0.08)',ci:'var(--c-net)',ic:'#ic-nat',t:'NAT Gateway · AZ-b',s:'myapp-prod-nat-2',secs:[{t:'CONFIGURATION',rows:[{k:'Subnet',v:'10.0.1.0/24',c:'vg'},{k:'AZ',v:'ap-northeast-2b',c:'vb'},{k:'EIP',v:'EIP ②',c:''}]}]},
+  'nat-c':{bg:'rgba(110,54,245,0.08)',ci:'var(--c-net)',ic:'#ic-nat',t:'NAT Gateway · AZ-c',s:'myapp-prod-nat-3',secs:[{t:'CONFIGURATION',rows:[{k:'Subnet',v:'10.0.2.0/24',c:'vg'},{k:'AZ',v:'ap-northeast-2c',c:'vb'},{k:'EIP',v:'EIP ③',c:''}]}]},
+  'nat-stg':{bg:'rgba(110,54,245,0.08)',ci:'var(--c-net)',ic:'#ic-nat',t:'NAT Gateway · Staging',s:'2 AZs',secs:[{t:'CONFIGURATION',rows:[{k:'AZs',v:'ap-northeast-2a, 2c',c:'vb'},{k:'Layer',v:'10-networking',c:''}]}]},
+  alb:{bg:'rgba(110,54,245,0.08)',ci:'var(--c-net)',ic:'#ic-alb',t:'Application Load Balancer',s:'myapp-prod-alb',
+    secs:[
+      {t:'LISTENERS',rows:[{k:'HTTP :80',v:'301 → HTTPS :443',c:'vr'},{k:'HTTPS :443',v:'Forward → Default TG',c:'vg'},{k:'SSL Policy',v:'ELBSecurityPolicy-TLS13-1-2-2021-06',c:''},{k:'Certificate',v:'ACM · ap-northeast-2',c:'vb'}]},
+      {t:'TARGET GROUP',rows:[{k:'Name',v:'myapp-prod-default-tg',c:''},{k:'Target Type',v:'ip (EKS Pod IP)',c:'vb'},{k:'Health',v:'GET /health → 200',c:'vg'},{k:'Interval',v:'30s | Timeout: 5s',c:''},{k:'Threshold',v:'healthy: 2 / unhealthy: 3',c:''}]},
+      {t:'NETWORKING',rows:[{k:'Scheme',v:'internet-facing',c:''},{k:'Subnets',v:'3 public AZs',c:'vg'},{k:'SG',v:'alb-sg',c:'vr'},{k:'Deletion Prot.',v:'true',c:'vg'},{k:'Layer',v:'30-application',c:''}]},
+    ],code:`<span class="kw">resource</span> <span class="str">"aws_lb" "this"</span> {\n  <span class="k">name</span>               = <span class="str">"myapp-prod-alb"</span>\n  <span class="k">load_balancer_type</span> = <span class="str">"application"</span>\n  <span class="k">internal</span>           = <span class="num">false</span>\n  <span class="k">enable_deletion_protection</span> = <span class="num">true</span>\n}`},
+  'alb-stg':{bg:'rgba(110,54,245,0.08)',ci:'var(--c-net)',ic:'#ic-alb',t:'ALB · Staging',s:'myapp-staging-alb',secs:[{t:'LISTENERS',rows:[{k:'HTTP :80',v:'Forward → EKS',c:'vg'},{k:'TLS',v:'없음',c:'vy'},{k:'Deletion Prot.',v:'false',c:'vr'}]}]},
+  eks:{bg:'rgba(212,88,15,0.08)',ci:'var(--c-cmp)',ic:'#ic-eks',t:'Amazon EKS Cluster',s:'myapp-prod-cluster',
+    secs:[
+      {t:'CLUSTER',rows:[{k:'Version',v:'Kubernetes 1.29',c:'vb'},{k:'Private Access',v:'true',c:'vg'},{k:'Public Access',v:'true',c:''},{k:'Subnets',v:'private (3 AZs)',c:''},{k:'SG',v:'eks-nodes-sg',c:'vr'},{k:'Layer',v:'30-application',c:''}]},
+      {t:'IAM',rows:[{k:'Cluster Role',v:'myapp-prod-eks-cluster-role',c:''},{k:'Policy',v:'AmazonEKSClusterPolicy',c:'vb'},{k:'Node Role',v:'myapp-prod-eks-node-role',c:''},{k:'Policies',v:'WorkerNode + CNI + ECR',c:'vg'}]},
+    ]},
+  'eks-stg':{bg:'rgba(212,88,15,0.08)',ci:'var(--c-cmp)',ic:'#ic-eks',t:'EKS Cluster · Staging',s:'myapp-staging-cluster',secs:[{t:'CLUSTER',rows:[{k:'Version',v:'Kubernetes 1.29',c:'vb'},{k:'Node Groups',v:'Spot Only',c:'vy'},{k:'AZs',v:'2 (a, c)',c:''}]}]},
+  'ng-od':{bg:'rgba(212,88,15,0.08)',ci:'var(--c-cmp)',ic:'#ic-node',t:'Node Group · On-Demand',s:'myapp-prod-ng-on_demand',secs:[{t:'SPEC',rows:[{k:'Instance',v:'m5.large (2 vCPU / 8GB)',c:'vb'},{k:'Capacity',v:'ON_DEMAND',c:'vg'},{k:'Desired',v:'3',c:''},{k:'Min / Max',v:'3 / 10',c:''},{k:'Max Unavailable',v:'1 (rolling update)',c:''}]}]},
+  'ng-spot':{bg:'rgba(212,88,15,0.08)',ci:'var(--c-cmp)',ic:'#ic-node',t:'Node Group · Spot',s:'myapp-prod-ng-spot',secs:[{t:'SPEC',rows:[{k:'Instances',v:'m5.large, m5a.large, m4.large',c:'vb'},{k:'Capacity',v:'SPOT',c:'vy'},{k:'Desired',v:'2',c:''},{k:'Min / Max',v:'0 / 5',c:''},{k:'Risk',v:'인터럽트 가능',c:'vr'}]}]},
+  'ng-stg-spot':{bg:'rgba(212,88,15,0.08)',ci:'var(--c-cmp)',ic:'#ic-node',t:'Node Group · Spot (Staging)',s:'t3.medium',secs:[{t:'SPEC',rows:[{k:'Instances',v:'t3.medium, t3a.medium',c:'vb'},{k:'Desired',v:'2 (min:1 max:5)',c:''}]}]},
+  rds:{bg:'rgba(26,94,184,0.08)',ci:'var(--c-db)',ic:'#ic-rds',t:'Amazon RDS · PostgreSQL 15',s:'myapp-prod-db',
+    secs:[
+      {t:'INSTANCE',rows:[{k:'Engine',v:'PostgreSQL 15',c:'vb'},{k:'Class',v:'db.r6g.large (2 vCPU / 16GB)',c:''},{k:'Storage',v:'100GB gp3 → 300GB auto',c:''},{k:'Encrypted',v:'true',c:'vg'}]},
+      {t:'HIGH AVAILABILITY',rows:[{k:'Multi-AZ',v:'true (자동 페일오버)',c:'vg'},{k:'Backup',v:'7 days',c:''},{k:'Backup Window',v:'03:00–04:00 UTC',c:''},{k:'Deletion Prot.',v:'true',c:'vg'}]},
+      {t:'MONITORING',rows:[{k:'Performance Insights',v:'enabled (7d)',c:'vg'},{k:'log_connections',v:'on',c:''},{k:'SG',v:'rds-sg (:5432 from EKS only)',c:'vr'},{k:'Layer',v:'30-application',c:''}]},
+    ],code:`<span class="kw">module</span> <span class="str">"rds"</span> {\n  <span class="k">instance_class</span>      = <span class="str">"db.r6g.large"</span>\n  <span class="k">allocated_storage</span>   = <span class="num">100</span>\n  <span class="k">multi_az</span>            = <span class="num">true</span>\n  <span class="k">deletion_protection</span> = <span class="num">true</span>\n  <span class="k">backup_retention_period</span> = <span class="num">7</span>\n}`},
+  'rds-stg':{bg:'rgba(26,94,184,0.08)',ci:'var(--c-db)',ic:'#ic-rds',t:'RDS PostgreSQL 15 · Staging',s:'myapp-staging-db',secs:[{t:'INSTANCE',rows:[{k:'Class',v:'db.t4g.medium',c:''},{k:'Storage',v:'20GB gp3',c:''},{k:'Multi-AZ',v:'false',c:'vr'},{k:'Deletion Prot.',v:'false',c:'vr'}]}]},
+  'sg-all':{bg:'rgba(193,18,43,0.08)',ci:'var(--c-sec)',ic:'#ic-sg',t:'Security Groups',s:'20-security layer',secs:[{t:'TERRAFORM',rows:[{k:'Layer',v:'20-security',c:''},{k:'Module',v:'modules/security-groups',c:'vn'},{k:'Lifecycle',v:'create_before_destroy = true',c:'vg'}]}]},
+  'sg-alb':{bg:'rgba(193,18,43,0.08)',ci:'var(--c-sec)',ic:'#ic-sg',t:'Security Group · alb-sg',s:'myapp-prod-alb-sg',secs:[{t:'INBOUND',rows:[{k:':80 TCP',v:'0.0.0.0/0',c:''},{k:':443 TCP',v:'0.0.0.0/0',c:'vg'}]},{t:'OUTBOUND',rows:[{k:'all',v:'0.0.0.0/0',c:''}]}]},
+  'sg-eks':{bg:'rgba(193,18,43,0.08)',ci:'var(--c-sec)',ic:'#ic-sg',t:'Security Group · eks-nodes-sg',s:'myapp-prod-eks-nodes-sg',secs:[{t:'INBOUND',rows:[{k:'0-65535 TCP',v:'← alb-sg',c:'vb'},{k:'all (-1)',v:'← self (node-to-node)',c:''}]},{t:'DESIGN',rows:[{k:'Access',v:'ALB에서만 트래픽 허용',c:'vg'},{k:'Self',v:'노드 간 통신 허용',c:'vg'}]}]},
+  'sg-rds':{bg:'rgba(193,18,43,0.08)',ci:'var(--c-sec)',ic:'#ic-sg',t:'Security Group · rds-sg',s:'myapp-prod-rds-sg',secs:[{t:'INBOUND',rows:[{k:':5432 TCP',v:'← eks-nodes-sg only',c:'vb'}]},{t:'DESIGN',rows:[{k:'Access',v:'EKS 노드에서만 접근',c:'vg'},{k:'Internet',v:'직접 접근 불가',c:'vg'}]}]},
+  s3:{bg:'rgba(30,126,52,0.08)',ci:'var(--c-str)',ic:'#ic-s3',t:'S3 Terraform State',s:'myapp-tfstate-prod',secs:[{t:'STATE FILES',rows:[{k:'networking',v:'prod/networking/terraform.tfstate',c:'vg'},{k:'security',v:'prod/security/terraform.tfstate',c:''},{k:'application',v:'prod/application/terraform.tfstate',c:''}]},{t:'DATA SOURCES',rows:[{k:'→ application',v:'vpc_id, subnet_ids',c:'vb'},{k:'→ application',v:'sg IDs (alb, eks, rds)',c:'vr'}]},{t:'BACKEND',rows:[{k:'Type',v:'s3',c:''},{k:'Region',v:'ap-northeast-2',c:''},{k:'Locking',v:'DynamoDB 추가 권장',c:'vy'}]}]},
+  's3-stg':{bg:'rgba(30,126,52,0.08)',ci:'var(--c-str)',ic:'#ic-s3',t:'S3 State · Staging',s:'myapp-tfstate-staging',secs:[{t:'BACKEND',rows:[{k:'Bucket',v:'myapp-tfstate-staging',c:'vg'}]}]},
+  iam:{bg:'rgba(193,18,43,0.08)',ci:'var(--c-sec)',ic:'#ic-iam',t:'IAM Roles',s:'EKS Cluster + Node',secs:[{t:'CLUSTER ROLE',rows:[{k:'Name',v:'myapp-prod-eks-cluster-role',c:''},{k:'Principal',v:'eks.amazonaws.com',c:'vb'},{k:'Policy',v:'AmazonEKSClusterPolicy',c:'vg'}]},{t:'NODE ROLE',rows:[{k:'Name',v:'myapp-prod-eks-node-role',c:''},{k:'Principal',v:'ec2.amazonaws.com',c:'vb'},{k:'Policies',v:'WorkerNodePolicy + CNI + ECR',c:'vg'}]}]},
+  rt:{bg:'rgba(110,54,245,0.08)',ci:'var(--c-net)',ic:'#ic-rt',t:'Route Tables',s:'myapp-prod',secs:[{t:'PUBLIC RT',rows:[{k:'Route',v:'0.0.0.0/0 → IGW',c:'vg'},{k:'Subnets',v:'3 public subnets',c:''}]},{t:'PRIVATE RTs (× 3)',rows:[{k:'Route',v:'0.0.0.0/0 → NAT GW (per-AZ)',c:'vg'},{k:'Design',v:'single_nat_gateway = false',c:'vg'}]}]},
+
+  /* ── DEV environment ── */
+  'igw-dev':{bg:'rgba(110,54,245,0.08)',ci:'var(--c-net)',ic:'#ic-igw',t:'Internet Gateway · Dev',s:'myapp-dev-igw',
+    secs:[{t:'CONFIGURATION',rows:[{k:'VPC',v:'10.30.0.0/16',c:'vb'},{k:'AZs',v:'1 (ap-northeast-2a)',c:''},{k:'Layer',v:'10-networking',c:''}]}]},
+  'nat-dev':{bg:'rgba(110,54,245,0.08)',ci:'var(--c-net)',ic:'#ic-nat',t:'NAT Gateway · Dev',s:'단일 NAT (비용 절감)',
+    secs:[{t:'CONFIGURATION',rows:[{k:'Subnet',v:'10.30.0.0/24',c:'vg'},{k:'AZ',v:'ap-northeast-2a (단일)',c:'vb'},{k:'EIP',v:'myapp-dev-nat-eip',c:''},{k:'Layer',v:'10-networking',c:''}]},
+    {t:'NOTE',rows:[{k:'HA',v:'단일 NAT — 고가용성 없음',c:'vy'},{k:'비용',v:'단일 NAT ≈ $32/월',c:'vg'}]}]},
+  'eks-dev':{bg:'rgba(212,88,15,0.08)',ci:'var(--c-cmp)',ic:'#ic-eks',t:'EKS Cluster · Dev',s:'myapp-dev-cluster',
+    secs:[{t:'CLUSTER',rows:[{k:'Version',v:'Kubernetes 1.29',c:'vb'},{k:'Endpoint',v:'public + private',c:''},{k:'AZs',v:'1 (ap-northeast-2a)',c:'vy'},{k:'Node Groups',v:'Spot Only',c:'vy'},{k:'Layer',v:'30-application',c:''}]},
+    {t:'비용 절감',rows:[{k:'전략',v:'Karpenter / CA scale-to-zero',c:'vg'},{k:'Idle Cost',v:'≈ $0/day (노드 없을 때)',c:'vg'}]}]},
+  'ng-dev-spot':{bg:'rgba(212,88,15,0.08)',ci:'var(--c-cmp)',ic:'#ic-node',t:'Node Group · Spot (Dev)',s:'t3.small',
+    secs:[{t:'SPEC',rows:[{k:'Instances',v:'t3.small, t3a.small',c:'vb'},{k:'Capacity',v:'SPOT',c:'vy'},{k:'Desired',v:'1',c:''},{k:'Min / Max',v:'1 / 3',c:''},{k:'vCPU/RAM',v:'2 vCPU / 2 GB',c:''}]},
+    {t:'비용',rows:[{k:'On-Demand 가격',v:'t3.small ≈ $0.0208/hr',c:''},{k:'Spot 절감',v:'약 60-80% 절감',c:'vg'}]}]},
+  'rds-dev':{bg:'rgba(26,94,184,0.08)',ci:'var(--c-db)',ic:'#ic-rds',t:'RDS · Dev (선택적)',s:'myapp-dev-db',
+    secs:[{t:'옵션 A — RDS 배포',rows:[{k:'Class',v:'db.t4g.micro (2 vCPU / 1GB)',c:''},{k:'Storage',v:'10GB gp3',c:''},{k:'Multi-AZ',v:'false',c:'vr'},{k:'Deletion Prot.',v:'false',c:'vr'},{k:'월 비용',v:'약 $12–15/월',c:'vy'}]},
+    {t:'옵션 B — Staging DB 공유',rows:[{k:'방법',v:'별도 스키마/데이터베이스 사용',c:'vg'},{k:'비용',v:'$0 추가',c:'vg'},{k:'주의',v:'스테이징 부하 증가 가능',c:'vy'}]},
+    {t:'옵션 C — 로컬 / EKS 내 PG',rows:[{k:'방법',v:'Helm bitnami/postgresql',c:'vg'},{k:'비용',v:'$0 (노드 비용만)',c:'vg'}]}],
+    note:'Dev 환경은 RDS 대신 Staging DB를 공유하거나 EKS 내 PostgreSQL Helm chart를 권장합니다.'},
+  'sg-dev-eks':{bg:'rgba(193,18,43,0.08)',ci:'var(--c-sec)',ic:'#ic-sg',t:'SG · eks-nodes-sg (Dev)',s:'myapp-dev-eks-nodes-sg',
+    secs:[{t:'INBOUND',rows:[{k:':30000-32767 TCP',v:'0.0.0.0/0 (NodePort)',c:''},{k:'all (-1)',v:'← self',c:''}]},{t:'NOTE',rows:[{k:'ALB 없음',v:'NodePort 또는 port-forward',c:'vy'}]}]},
+  'sg-dev-rds':{bg:'rgba(193,18,43,0.08)',ci:'var(--c-sec)',ic:'#ic-sg',t:'SG · rds-sg (Dev)',s:'myapp-dev-rds-sg (선택)',
+    secs:[{t:'INBOUND',rows:[{k:':5432 TCP',v:'← eks-nodes-sg',c:'vb'}]},{t:'NOTE',rows:[{k:'배포 여부',v:'RDS 사용 시에만 필요',c:'vy'}]}]},
+  's3-dev':{bg:'rgba(30,126,52,0.08)',ci:'var(--c-str)',ic:'#ic-s3',t:'S3 State · Dev',s:'myapp-tfstate-dev',
+    secs:[{t:'BACKEND',rows:[{k:'Bucket',v:'myapp-tfstate-dev',c:'vg'},{k:'Keys',v:'dev/networking, dev/security, dev/application',c:''}]},{t:'TIP',rows:[{k:'로컬 state',v:'tflocal (localstack) 사용 가능',c:'vy'}]}]},
+};
+
+function sd(id) {
+  const d = D[id]; if (!d) return;
+  const dp  = document.getElementById('dp');
+  const dps = document.getElementById('dps');
+
+  let h = `
+    <div class="dp-header">
+      <button class="dp-close" onclick="cdp()">✕</button>
+      <div class="dp-ic" style="background:${d.bg};">
+        <svg viewBox="0 0 48 48" style="color:${d.ci};"><use href="${d.ic}"/></svg>
+      </div>
+      <div class="dp-title">${d.t}</div>
+      <div class="dp-sub">${d.s}</div>
+    </div>`;
+
+  for (const sec of d.secs) {
+    h += `<div class="dp-sec"><div class="dp-sec-title">${sec.t}</div>`;
+    for (const r of sec.rows)
+      h += `<div class="dp-row"><span class="dp-k">${r.k}</span><span class="dp-v ${r.c||''}">${r.v}</span></div>`;
+    h += `</div>`;
+  }
+  if (d.code) h += `<div class="dp-sec"><div class="dp-sec-title">TERRAFORM</div><div class="dp-code">${d.code}</div></div>`;
+  if (d.note) h += `<div class="dp-note">${d.note}</div>`;
+
+  dps.innerHTML = h;
+  dp.classList.add('open');
+}
+function cdp() { document.getElementById('dp').classList.remove('open'); }
+
+function setEnv(e) {
+  // update segment control
+  document.querySelectorAll('.seg-btn').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.seg-btn[data-env="${e}"]`).classList.add('active');
+
+  // update gnav indicator
+  const dot   = document.getElementById('gnav-dot');
+  const label = document.getElementById('gnav-label');
+  const meta  = { prod: ['#34c759','Production'], staging: ['#ff9500','Staging'], dev: ['#5856d6','Dev'] };
+  const [color, name] = meta[e] || ['#34c759','Production'];
+  dot.style.background = color;
+  label.textContent = name;
+
+  // switch content
+  document.getElementById('prod-view').classList.toggle('on', e === 'prod');
+  document.getElementById('staging-view').classList.toggle('on', e === 'staging');
+  document.getElementById('dev-view').classList.toggle('on', e === 'dev');
+  cdp();
+}
+
+// Tooltip
+const TT = document.getElementById('tt');
+document.querySelectorAll('[data-tt]').forEach(el => {
+  el.addEventListener('mouseenter', () => { TT.textContent = el.dataset.tt; TT.style.opacity = '1'; });
+  el.addEventListener('mousemove', e => { TT.style.left = (e.clientX + 12) + 'px'; TT.style.top = (e.clientY - 34) + 'px'; });
+  el.addEventListener('mouseleave', () => { TT.style.opacity = '0'; });
+});
+document.querySelectorAll('.node[data-tt]').forEach(el => {
+  el.addEventListener('mouseenter', () => { TT.textContent = el.dataset.tt; TT.style.opacity = '1'; });
+  el.addEventListener('mousemove', e => { TT.style.left = (e.clientX + 12) + 'px'; TT.style.top = (e.clientY - 34) + 'px'; });
+  el.addEventListener('mouseleave', () => { TT.style.opacity = '0'; });
+});
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') cdp(); });
+</script>
+</body>
+</html>
