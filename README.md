@@ -33,6 +33,12 @@ modules/
 2. `20-security`가 networking state의 `vpc_id`를 참조해 보안 그룹을 생성합니다.
 3. `30-application`이 networking/security state를 참조해 EKS, RDS, ALB를 생성합니다.
 
+## 아키텍처 문서
+
+`architecture.html`은 이 저장소의 Terraform 구성을 시각화한 인터랙티브 아키텍처 문서입니다. 브라우저에서 파일을 열면 `dev`, `staging`, `prod` 환경별 VPC, public/private subnet, NAT Gateway, ALB, EKS, RDS, Security Group, Terraform remote state 구성을 확인할 수 있습니다.
+
+README는 배포 순서와 운영 방법을 설명하고, `architecture.html`은 리소스 간 연결 관계와 환경별 차이를 빠르게 파악하기 위한 보조 문서로 사용합니다.
+
 ## 생성 리소스
 
 | 모듈 | 주요 리소스 |
